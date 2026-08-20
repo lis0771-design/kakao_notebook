@@ -83,6 +83,45 @@ st.markdown(
     .stTabs [data-baseweb="tab-highlight"] {
         background-color: #7C3AED !important;
     }
+    .upload-heading {
+        font-size: 2.1rem !important;
+        font-weight: 800 !important;
+        color: #111111 !important;
+        margin: 0.2rem 0 0.9rem 0 !important;
+        letter-spacing: -0.03em !important;
+    }
+    [data-testid="stFileUploaderDropzoneInstructions"] {
+        display: none !important;
+    }
+    [data-testid="stFileUploader"] small {
+        display: none !important;
+    }
+    [data-testid="stFileUploaderDropzone"] {
+        min-height: 88px !important;
+        align-items: center !important;
+        justify-content: center !important;
+        border: 2px solid #111111 !important;
+        background: #FEE500 !important;
+    }
+    [data-testid="stFileUploader"] button {
+        background: #111111 !important;
+        color: #FEE500 !important;
+        font-weight: 800 !important;
+        font-size: 0 !important;
+        border: 0 !important;
+        min-height: 48px !important;
+        padding: 0.7rem 1.6rem !important;
+    }
+    [data-testid="stFileUploader"] button p,
+    [data-testid="stFileUploader"] button span {
+        font-size: 0 !important;
+    }
+    [data-testid="stFileUploader"] button::after {
+        content: "Upload";
+        font-size: 1.2rem !important;
+        font-weight: 800 !important;
+        color: #FEE500 !important;
+    }
     </style>
     """,
     unsafe_allow_html=True,
@@ -553,64 +592,102 @@ def render_participant_card(name: str, count: int, total: int, avg_len: float, t
     """
 
 
-with st.sidebar:
+def prepare_chat_df(df: pd.DataFrame) -> dict:
+    df = df.copy()
+    df["User"] = df["User"].fillna("알 수 없음").astype(str)
+    df["Message"] = df["Message"].fillna("").astype(str)
+    df["char_len"] = df["Message"].str.len()
+    df["datetime"] = pd.to_datetime(df["Date"], errors="coerce")
+    invalid_dates = int(df["datetime"].isna().sum())
+    time_df = df.dropna(subset=["datetime"]).copy()
+    return {
+        "df": df,
+        "time_df": time_df,
+        "invalid_dates": invalid_dates,
+        "total_messages": len(df),
+        "participants": sorted(df["User"].unique()),
+    }
+
+
+def try_load_chat(uploaded_file, pasted_text: str):
+    if uploaded_file is not None:
+        return load_chat_file(uploaded_file)
+    if pasted_text and pasted_text.strip():
+        parsed = parse_kakaotalk_text(pasted_text)
+        if parsed.empty:
+            raise ValueError("카카오톡 대화 형식을 읽지 못했습니다.")
+        return parsed
+    return None
+
+
+if "chat" not in st.session_state:
+    st.session_state.chat = None
+
+if st.session_state.chat is None:
+    st.markdown(
+        """
+        <style>
+        [data-testid="stSidebar"] { display: none !important; }
+        [data-testid="stSidebarCollapsedControl"] { display: none !important; }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
     st.title("💬 카카오톡 대화 분석기")
-    st.caption("카카오톡에서 내보낸 txt 또는 csv를 올리면 참여자, 시간대, 단어, 답장 속도를 분석합니다.")
+    st.caption("카카오톡에서 내보낸 txt 또는 csv 파일을 올리면 대화를 분석합니다.")
     uploaded_file = st.file_uploader(
-        "대화 파일 업로드 (txt, csv)",
+        "Upload",
         type=None,
-        help="카카오톡에서 내보낸 .txt 파일을 선택하세요.",
+        label_visibility="collapsed",
+        key="landing_upload",
     )
     pasted_text = st.text_area(
         "또는 대화 내용 붙여넣기",
         height=120,
         placeholder="파일이 안 보이면 내보낸 텍스트를 여기에 붙여넣으세요.",
     )
+    st.caption("카카오톡 → 대화 내용 내보내기 → 모든 메시지 내부저장소에 저장한 txt 파일을 선택하세요.")
 
-    df = None
-    if uploaded_file is not None:
+    if uploaded_file is not None or (pasted_text and pasted_text.strip()):
         try:
-            df = load_chat_file(uploaded_file)
+            loaded = try_load_chat(uploaded_file, pasted_text)
+            if loaded is None or loaded.empty:
+                st.error("대화 내용을 읽지 못했습니다.")
+            else:
+                st.session_state.chat = prepare_chat_df(loaded)
+                st.rerun()
         except Exception as error:
             st.error(f"파일을 불러오지 못했습니다: {error}")
-            df = None
-    elif pasted_text.strip():
-        try:
-            parsed = parse_kakaotalk_text(pasted_text)
-            if parsed.empty:
-                raise ValueError("카카오톡 대화 형식을 읽지 못했습니다.")
-            df = parsed
-        except Exception as error:
-            st.error(f"붙여넣은 대화를 읽지 못했습니다: {error}")
-            df = None
+    st.stop()
 
-    if df is not None:
-        df = df.copy()
-        df["User"] = df["User"].fillna("알 수 없음").astype(str)
-        df["Message"] = df["Message"].fillna("").astype(str)
-        df["char_len"] = df["Message"].str.len()
-        df["datetime"] = pd.to_datetime(df["Date"], errors="coerce")
-        invalid_dates = int(df["datetime"].isna().sum())
-        time_df = df.dropna(subset=["datetime"]).copy()
-        total_messages = len(df)
-        participants = sorted(df["User"].unique())
+chat = st.session_state.chat
+df = chat["df"]
+time_df = chat["time_df"]
+invalid_dates = chat["invalid_dates"]
+total_messages = chat["total_messages"]
+participants = chat["participants"]
 
-        st.divider()
-        st.subheader("📌 기본 정보")
-        st.metric("메시지 수", f"{total_messages:,}개")
-        st.markdown("**참여자**")
-        st.write(", ".join(participants) if participants else "없음")
+with st.sidebar:
+    st.title("💬 카카오톡 대화 분석기")
+    if st.button("새 파일 Upload", use_container_width=True):
+        st.session_state.chat = None
+        st.rerun()
 
-        if time_df.empty:
-            st.markdown("**기간**")
-            st.write("날짜를 읽을 수 없습니다.")
-        else:
-            start_date = time_df["datetime"].min()
-            end_date = time_df["datetime"].max()
-            st.markdown("**기간**")
-            st.write(f"{start_date:%Y-%m-%d} ~ {end_date:%Y-%m-%d}")
-            if invalid_dates:
-                st.caption(f"날짜 없음 {invalid_dates:,}개 제외")
+    st.divider()
+    st.subheader("📌 기본 정보")
+    st.metric("메시지 수", f"{total_messages:,}개")
+    st.markdown("**참여자**")
+    st.write(", ".join(participants) if participants else "없음")
+    if time_df.empty:
+        st.markdown("**기간**")
+        st.write("날짜를 읽을 수 없습니다.")
+    else:
+        start_date = time_df["datetime"].min()
+        end_date = time_df["datetime"].max()
+        st.markdown("**기간**")
+        st.write(f"{start_date:%Y-%m-%d} ~ {end_date:%Y-%m-%d}")
+        if invalid_dates:
+            st.caption(f"날짜 없음 {invalid_dates:,}개 제외")
 
     st.divider()
     st.subheader("📖 사용 방법")
@@ -618,16 +695,9 @@ with st.sidebar:
         """
 1. 카카오톡 **대화 내용 내보내기 → 모든 메시지 내부저장소에 저장**
 2. 파일은 보통 `KakaoTalk_날짜.txt` 입니다.
-3. 핸드폰에서 **최근 파일이 비어 있으면** 왼쪽 위 메뉴(☰) 또는 **파일** 탭을 누르고 `KakaoTalk` / `Download` 폴더를 여세요.
-4. 그래도 안 보이면 파일을 **다운로드 폴더로 복사**하거나, 위 **붙여넣기** 칸을 사용하세요.
-5. PC에서는 txt 또는 `Date, User, Message` CSV를 올리면 됩니다.
+3. 첫 화면 **Upload** 버튼으로 파일을 선택하세요.
         """
     )
-
-
-if df is None:
-    st.info("왼쪽 사이드바에서 카카오톡 txt 또는 CSV 파일을 업로드하면 분석 탭이 나타납니다.")
-    st.stop()
 
 stats = (
     df.groupby("User", as_index=False)
