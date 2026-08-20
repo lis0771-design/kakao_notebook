@@ -516,8 +516,8 @@ with st.sidebar:
     st.caption("카카오톡에서 내보낸 txt 또는 csv를 올리면 참여자, 시간대, 단어, 답장 속도를 분석합니다.")
     uploaded_file = st.file_uploader(
         "대화 파일 업로드",
-        type=["txt", "csv"],
-        help="핸드폰은 '최근'이 비어 있으면 파일 앱에서 KakaoTalk 폴더의 txt를 고르세요.",
+        type=None,
+        help="최근 파일에서 카카오톡으로 내보낸 파일을 고르세요.",
     )
     pasted_text = st.text_area(
         "또는 대화 내용 붙여넣기",
