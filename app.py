@@ -1,3 +1,5 @@
+from datetime import datetime
+from io import BytesIO
 import random
 import re
 from collections import Counter
@@ -90,6 +92,97 @@ def load_csv(file) -> pd.DataFrame:
             last_error = error
 
     raise last_error
+
+
+KAKAO_DATE_RE = re.compile(r"^--------------- (\d{4})년 (\d{1,2})월 (\d{1,2})일")
+KAKAO_MSG_RE = re.compile(r"^\[(.*?)\] \[(오전|오후) (\d{1,2}):(\d{2})\] ?(.*)$")
+KAKAO_SKIP_RE = re.compile(
+    r"^(메시지가 삭제되었습니다\.|.+님이 .+을 초대했습니다\.|저장한 날짜 :|.+님과 카카오톡 대화)$"
+)
+
+
+def decode_upload(data: bytes) -> str:
+    for encoding in ("utf-8-sig", "utf-8", "cp949"):
+        try:
+            return data.decode(encoding)
+        except UnicodeDecodeError:
+            continue
+    return data.decode("utf-8", errors="replace")
+
+
+def kakao_datetime(year, month, day, ampm, hour, minute) -> datetime:
+    hour = int(hour)
+    minute = int(minute)
+    if ampm == "오전":
+        if hour == 12:
+            hour = 0
+    elif hour != 12:
+        hour += 12
+    return datetime(int(year), int(month), int(day), hour, minute)
+
+
+def parse_kakaotalk_text(text: str) -> pd.DataFrame:
+    current_date = None
+    rows = []
+
+    for raw in text.splitlines():
+        line = raw.rstrip("\n")
+        date_match = KAKAO_DATE_RE.match(line)
+        if date_match:
+            current_date = date_match.groups()
+            continue
+
+        msg_match = KAKAO_MSG_RE.match(line)
+        if msg_match and current_date:
+            user, ampm, hour, minute, message = msg_match.groups()
+            rows.append(
+                {
+                    "Date": kakao_datetime(*current_date, ampm, hour, minute).strftime("%Y-%m-%d %H:%M:%S"),
+                    "User": user,
+                    "Message": message,
+                }
+            )
+            continue
+
+        if KAKAO_SKIP_RE.match(line.strip() or ""):
+            continue
+
+        if rows and line.strip():
+            rows[-1]["Message"] = (rows[-1]["Message"] + "\n" + line).strip()
+
+    return pd.DataFrame(rows, columns=REQUIRED_COLUMNS)
+
+
+def looks_like_kakaotalk(text: str) -> bool:
+    head = text[:4000]
+    return "카카오톡 대화" in head or bool(KAKAO_DATE_RE.search(head)) or bool(KAKAO_MSG_RE.search(head))
+
+
+def load_chat_file(file) -> pd.DataFrame:
+    raw = file.getvalue()
+    name = (getattr(file, "name", "") or "").lower()
+    text = decode_upload(raw)
+
+    if name.endswith(".txt") or looks_like_kakaotalk(text):
+        parsed = parse_kakaotalk_text(text)
+        if not parsed.empty:
+            return parsed
+        if name.endswith(".txt"):
+            raise ValueError("카카오톡 대화 텍스트 형식을 읽지 못했습니다.")
+
+    csv_df = load_csv(BytesIO(raw))
+    missing = [col for col in REQUIRED_COLUMNS if col not in csv_df.columns]
+    if missing and looks_like_kakaotalk(text):
+        parsed = parse_kakaotalk_text(text)
+        if not parsed.empty:
+            return parsed
+    if missing:
+        raise ValueError(
+            "필수 칼럼이 없습니다: "
+            + ", ".join(missing)
+            + f" / 현재 칼럼: {', '.join(csv_df.columns.astype(str))}"
+        )
+    return csv_df
 
 
 WEEKDAYS_KO = ["월", "화", "수", "목", "금", "토", "일"]
@@ -420,25 +513,34 @@ def render_participant_card(name: str, count: int, total: int, avg_len: float, t
 
 with st.sidebar:
     st.title("💬 카카오톡 대화 분석기")
-    st.caption("카카오톡 CSV 대화를 업로드하면 참여자, 시간대, 단어, 답장 속도를 한눈에 볼 수 있습니다.")
-    uploaded_file = st.file_uploader("CSV 파일 업로드", type=["csv"])
+    st.caption("카카오톡에서 내보낸 txt 또는 csv를 올리면 참여자, 시간대, 단어, 답장 속도를 분석합니다.")
+    uploaded_file = st.file_uploader(
+        "대화 파일 업로드",
+        type=["txt", "csv"],
+        help="핸드폰은 '최근'이 비어 있으면 파일 앱에서 KakaoTalk 폴더의 txt를 고르세요.",
+    )
+    pasted_text = st.text_area(
+        "또는 대화 내용 붙여넣기",
+        height=120,
+        placeholder="파일이 안 보이면 내보낸 텍스트를 여기에 붙여넣으세요.",
+    )
 
     df = None
     if uploaded_file is not None:
         try:
-            df = load_csv(uploaded_file)
+            df = load_chat_file(uploaded_file)
         except Exception as error:
-            st.error(f"CSV를 불러오지 못했습니다: {error}")
+            st.error(f"파일을 불러오지 못했습니다: {error}")
             df = None
-        else:
-            missing_columns = [col for col in REQUIRED_COLUMNS if col not in df.columns]
-            if missing_columns:
-                st.error(
-                    "필수 칼럼이 없습니다: "
-                    + ", ".join(missing_columns)
-                    + f"\n현재 칼럼: {', '.join(df.columns.astype(str))}"
-                )
-                df = None
+    elif pasted_text.strip():
+        try:
+            parsed = parse_kakaotalk_text(pasted_text)
+            if parsed.empty:
+                raise ValueError("카카오톡 대화 형식을 읽지 못했습니다.")
+            df = parsed
+        except Exception as error:
+            st.error(f"붙여넣은 대화를 읽지 못했습니다: {error}")
+            df = None
 
     if df is not None:
         df = df.copy()
@@ -472,10 +574,11 @@ with st.sidebar:
     st.subheader("📖 사용 방법")
     st.markdown(
         """
-1. `Date`, `User`, `Message` 칼럼이 있는 CSV를 업로드하세요.
-2. 위쪽에 메시지 수, 참여자, 기간이 표시됩니다.
-3. 오른쪽 탭에서 통계, 시간, 단어, 답장 속도를 확인하세요.
-4. 단어 분석에서는 사진/이모티콘, URL, 숫자만 있는 메시지는 제외됩니다.
+1. 카카오톡 **대화 내용 내보내기 → 모든 메시지 내부저장소에 저장**
+2. 파일은 보통 `KakaoTalk_날짜.txt` 입니다.
+3. 핸드폰에서 **최근 파일이 비어 있으면** 왼쪽 위 메뉴(☰) 또는 **파일** 탭을 누르고 `KakaoTalk` / `Download` 폴더를 여세요.
+4. 그래도 안 보이면 파일을 **다운로드 폴더로 복사**하거나, 위 **붙여넣기** 칸을 사용하세요.
+5. PC에서는 txt 또는 `Date, User, Message` CSV를 올리면 됩니다.
         """
     )
 
