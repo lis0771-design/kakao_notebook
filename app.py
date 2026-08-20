@@ -34,16 +34,30 @@ st.markdown(
         padding: 18px 16px 14px 16px;
         box-shadow: 0 8px 22px rgba(254, 229, 0, 0.14);
     }
-    div[data-testid="stMetric"] label {
+    div[data-testid="stMetric"] label,
+    div[data-testid="stMetricLabel"],
+    div[data-testid="stMetricLabel"] p {
         color: #7A6A00 !important;
         font-weight: 700 !important;
+        font-size: 1.08rem !important;
+        line-height: 1.35 !important;
     }
     div[data-testid="stMetricValue"] {
         color: #191919 !important;
         font-weight: 800 !important;
+        font-size: 1.85rem !important;
     }
-    div[data-testid="stMetricDelta"] {
+    div[data-testid="stMetricDelta"],
+    div[data-testid="stMetricDelta"] p {
         color: #B8860B !important;
+        font-size: 1rem !important;
+    }
+    [data-testid="stCaption"],
+    [data-testid="stCaption"] p,
+    [data-testid="stWidgetLabel"] p,
+    .stMarkdown p, .stCaption {
+        font-size: 1.05rem !important;
+        line-height: 1.45 !important;
     }
     .stTabs {
         --primary-color: #7C3AED;
@@ -276,11 +290,11 @@ def style_chart(fig, title: str, reverse_y: bool = False, showlegend: bool = Fal
     fig.update_layout(
         title=dict(text=title, x=0.02, xanchor="left", font=dict(size=18, color="#191919")),
         template="plotly_white",
-        font=dict(family="Malgun Gothic, Apple SD Gothic Neo, sans-serif", size=13, color="#333333"),
+        font=dict(family="Malgun Gothic, Apple SD Gothic Neo, sans-serif", size=16, color="#333333"),
         margin=dict(l=10, r=20, t=60, b=10),
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(250, 250, 248, 0.85)",
-        hoverlabel=dict(bgcolor="white", font_size=13, font_color="#191919"),
+        hoverlabel=dict(bgcolor="white", font_size=15, font_color="#191919"),
         coloraxis_colorbar=dict(title=""),
         showlegend=showlegend,
         dragmode=False,
@@ -578,14 +592,14 @@ def render_participant_card(name: str, count: int, total: int, avg_len: float, t
         min-height: 168px;
         box-shadow: 0 8px 18px rgba(0,0,0,0.06);
     ">
-        <div style="font-size:12px; color:{theme['muted']}; font-weight:700; margin-bottom:6px;">참여자</div>
+        <div style="font-size:15px; color:{theme['muted']}; font-weight:700; margin-bottom:6px;">참여자</div>
         <div style="font-size:16px; font-weight:800; color:#191919; line-height:1.35; min-height:44px;">
             {escape(name)}
         </div>
         <div style="font-size:28px; font-weight:800; color:{theme['bar']}; margin-top:8px;">
             {count:,}<span style="font-size:14px; color:#666666; font-weight:600;"> 개</span>
         </div>
-        <div style="margin-top:8px; font-size:12px; color:#555555; line-height:1.5;">
+        <div style="margin-top:8px; font-size:15px; color:#555555; line-height:1.5;">
             점유율 {share:.1f}% · 평균 {avg_len:.1f}자<br>총 {total_chars:,}자
         </div>
     </div>
