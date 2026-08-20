@@ -256,7 +256,7 @@ def style_chart(fig, title: str, reverse_y: bool = False, showlegend: bool = Fal
 
 
 def show_chart(fig, **_kwargs):
-    show_chart(fig, use_container_width=True, config=PLOTLY_CONFIG, on_select="ignore")
+    st.plotly_chart(fig, use_container_width=True, config=PLOTLY_CONFIG, on_select="ignore")
 
 
 def make_bar_chart(stats: pd.DataFrame, value_col: str, title: str, hover_label: str, ascending: bool = False):
