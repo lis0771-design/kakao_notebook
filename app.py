@@ -15,6 +15,18 @@ st.set_page_config(page_title="카카오톡 대화 분석기", layout="wide")
 st.markdown(
     """
     <style>
+    @font-face {
+        font-family: "NanumGothicApp";
+        src: url("./app/static/NanumGothic-Regular.ttf") format("truetype"),
+             url("/app/static/NanumGothic-Regular.ttf") format("truetype");
+        font-weight: 400;
+        font-display: swap;
+    }
+    html, body, [data-testid="stAppViewContainer"], [data-testid="stMarkdown"],
+    [data-testid="stText"], [data-testid="stCaption"], textarea, p, span, label, div {
+        font-family: "NanumGothicApp", "Apple SD Gothic Neo", "Noto Sans KR",
+            "Malgun Gothic", sans-serif !important;
+    }
     div[data-testid="stMetric"] {
         background: linear-gradient(180deg, #FFFBEA 0%, #FFFFFF 100%);
         border: 1px solid #F3E28A;
@@ -504,6 +516,7 @@ def render_participant_card(name: str, count: int, total: int, avg_len: float, t
     share = (count / total * 100) if total else 0
     return f"""
     <div style="
+        font-family: "NanumGothicApp", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
         background: {theme['bg']};
         border: 1px solid {theme['border']};
         border-left: 7px solid {theme['bar']};
@@ -693,9 +706,14 @@ with tab_basic:
     longest_meta = f"{longest['User']} · {int(longest['char_len']):,}자"
     if "Date" in longest and pd.notna(longest["Date"]):
         longest_meta += f" · {longest['Date']}"
-    with st.container(border=True):
-        st.caption(longest_meta)
-        st.markdown(str(longest["Message"]).replace("\n", "  \n"))
+    st.caption(longest_meta)
+    longest_text = str(longest["Message"])
+    st.text_area(
+        "가장 긴 메시지 내용",
+        value=longest_text,
+        height=min(420, 140 + longest_text.count("\n") * 24),
+        label_visibility="collapsed",
+    )
 
     with st.expander("📋 데이터 미리보기"):
         st.dataframe(df.head(10), use_container_width=True)
