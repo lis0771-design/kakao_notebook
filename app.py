@@ -633,7 +633,10 @@ if st.session_state.chat is None:
         """,
         unsafe_allow_html=True,
     )
-    st.title("💬 카카오톡 대화 분석기")
+    st.markdown(
+        '<h1>💬 카카오톡<br><span style="white-space:nowrap;">대화 분석기</span></h1>',
+        unsafe_allow_html=True,
+    )
     st.caption("카카오톡에서 내보낸 txt 또는 csv 파일을 올리면 대화를 분석합니다.")
     uploaded_file = st.file_uploader(
         "Upload",
@@ -668,7 +671,10 @@ total_messages = chat["total_messages"]
 participants = chat["participants"]
 
 with st.sidebar:
-    st.title("💬 카카오톡 대화 분석기")
+    st.markdown(
+        '<h1>💬 카카오톡<br><span style="white-space:nowrap;">대화 분석기</span></h1>',
+        unsafe_allow_html=True,
+    )
     if st.button("새 파일 Upload", use_container_width=True):
         st.session_state.chat = None
         st.rerun()
