@@ -626,9 +626,6 @@ stats = (
 )
 stats["평균_메시지_길이"] = stats["평균_메시지_길이"].round(1)
 
-longest_idx = df["char_len"].idxmax()
-longest = df.loc[longest_idx]
-
 tab_basic, tab_time, tab_words, tab_reply = st.tabs(
     ["📊 기본 통계", "⏰ 시간 분석", "💬 단어 분석", "⚡ 답장 속도"]
 )
@@ -661,11 +658,10 @@ with tab_basic:
     kpi3.metric("📈 일평균 메시지 수", f"{daily_avg:.1f}개", daily_delta, border=True)
     kpi4.metric("🔥 가장 활발한 날", busiest_label, busiest_delta, border=True)
 
-    kpi5, kpi6, kpi7, kpi8 = st.columns(4)
+    kpi5, kpi6, kpi7 = st.columns(3)
     kpi5.metric("✍️ 평균 메시지 길이", f"{df['char_len'].mean():.1f}자", f"총 {int(df['char_len'].sum()):,}자", border=True)
     kpi6.metric("👥 대화 참여자 수", f"{len(participants):,}명", stats.iloc[0]["User"] + " 1위", border=True)
     kpi7.metric("🏆 가장 많이 말한 사람", stats.iloc[0]["User"], f"{int(stats.iloc[0]['메시지_개수']):,}개", border=True)
-    kpi8.metric("📝 가장 긴 메시지", f"{int(longest['char_len']):,}자", longest["User"], border=True)
 
     st.markdown("### 👥 참여자별 통계")
     card_cols = st.columns(3)
@@ -701,19 +697,6 @@ with tab_basic:
             make_bar_chart(stats, "평균_메시지_길이", "누가 메시지를 길게 쓰나", "평균 길이(자)"),
             use_container_width=True,
         )
-
-    st.markdown("### 💌 가장 긴 메시지")
-    longest_meta = f"{longest['User']} · {int(longest['char_len']):,}자"
-    if "Date" in longest and pd.notna(longest["Date"]):
-        longest_meta += f" · {longest['Date']}"
-    st.caption(longest_meta)
-    longest_text = str(longest["Message"])
-    st.text_area(
-        "가장 긴 메시지 내용",
-        value=longest_text,
-        height=min(420, 140 + longest_text.count("\n") * 24),
-        label_visibility="collapsed",
-    )
 
     with st.expander("📋 데이터 미리보기"):
         st.dataframe(df.head(10), use_container_width=True)
