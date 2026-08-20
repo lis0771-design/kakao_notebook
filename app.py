@@ -94,10 +94,17 @@ def load_csv(file) -> pd.DataFrame:
     raise last_error
 
 
-KAKAO_DATE_RE = re.compile(r"^--------------- (\d{4})년 (\d{1,2})월 (\d{1,2})일")
-KAKAO_MSG_RE = re.compile(r"^\[(.*?)\] \[(오전|오후) (\d{1,2}):(\d{2})\] ?(.*)$")
+KAKAO_DATE_RE = re.compile(r"-{2,}\s*(\d{4})년\s*(\d{1,2})월\s*(\d{1,2})일")
+KAKAO_DATE_LINE_RE = re.compile(r"^(\d{4})년\s*(\d{1,2})월\s*(\d{1,2})일")
+KAKAO_MSG_RE = re.compile(r"^\[(.*?)\]\s*\[(오전|오후)\s*(\d{1,2}):(\d{2})\]\s?(.*)$")
+KAKAO_IOS_MSG_RE = re.compile(
+    r"^(\d{4})\.\s*(\d{1,2})\.\s*(\d{1,2})\.\s*(오전|오후)\s*(\d{1,2}):(\d{2}),\s*(.+?)\s*:\s*(.*)$"
+)
+KAKAO_IOS_MSG_RE2 = re.compile(
+    r"^(\d{4})년\s*(\d{1,2})월\s*(\d{1,2})일\s*(오전|오후)\s*(\d{1,2}):(\d{2}),\s*(.+?)\s*:\s*(.*)$"
+)
 KAKAO_SKIP_RE = re.compile(
-    r"^(메시지가 삭제되었습니다\.|.+님이 .+을 초대했습니다\.|저장한 날짜 :|.+님과 카카오톡 대화)$"
+    r"^(메시지가 삭제되었습니다\.|.+님이 .+을 초대했습니다\.|저장한 날짜\s*:|.+님과 카카오톡 대화)$"
 )
 
 
@@ -127,8 +134,20 @@ def parse_kakaotalk_text(text: str) -> pd.DataFrame:
 
     for raw in text.splitlines():
         line = raw.rstrip("\n")
-        date_match = KAKAO_DATE_RE.match(line)
-        if date_match:
+        ios_match = KAKAO_IOS_MSG_RE.match(line) or KAKAO_IOS_MSG_RE2.match(line)
+        if ios_match:
+            year, month, day, ampm, hour, minute, user, message = ios_match.groups()
+            rows.append(
+                {
+                    "Date": kakao_datetime(year, month, day, ampm, hour, minute).strftime("%Y-%m-%d %H:%M:%S"),
+                    "User": user.strip(),
+                    "Message": message,
+                }
+            )
+            continue
+
+        date_match = KAKAO_DATE_RE.search(line) or KAKAO_DATE_LINE_RE.match(line.strip())
+        if date_match and not KAKAO_MSG_RE.match(line):
             current_date = date_match.groups()
             continue
 
@@ -162,27 +181,23 @@ def load_chat_file(file) -> pd.DataFrame:
     raw = file.getvalue()
     name = (getattr(file, "name", "") or "").lower()
     text = decode_upload(raw)
+    parsed = parse_kakaotalk_text(text)
+    if not parsed.empty:
+        return parsed
 
-    if name.endswith(".txt") or looks_like_kakaotalk(text):
-        parsed = parse_kakaotalk_text(text)
-        if not parsed.empty:
-            return parsed
-        if name.endswith(".txt"):
-            raise ValueError("카카오톡 대화 텍스트 형식을 읽지 못했습니다.")
+    csv_error = None
+    try:
+        csv_df = load_csv(BytesIO(raw))
+        missing = [col for col in REQUIRED_COLUMNS if col not in csv_df.columns]
+        if not missing:
+            return csv_df
+        csv_error = "필수 칼럼이 없습니다: " + ", ".join(missing)
+    except Exception as error:
+        csv_error = str(error)
 
-    csv_df = load_csv(BytesIO(raw))
-    missing = [col for col in REQUIRED_COLUMNS if col not in csv_df.columns]
-    if missing and looks_like_kakaotalk(text):
-        parsed = parse_kakaotalk_text(text)
-        if not parsed.empty:
-            return parsed
-    if missing:
-        raise ValueError(
-            "필수 칼럼이 없습니다: "
-            + ", ".join(missing)
-            + f" / 현재 칼럼: {', '.join(csv_df.columns.astype(str))}"
-        )
-    return csv_df
+    if name.endswith((".txt", ".text")) or looks_like_kakaotalk(text):
+        raise ValueError("카카오톡 txt 대화 형식을 읽지 못했습니다.")
+    raise ValueError(csv_error or "txt 또는 CSV 대화 파일을 읽지 못했습니다.")
 
 
 WEEKDAYS_KO = ["월", "화", "수", "목", "금", "토", "일"]
@@ -515,9 +530,9 @@ with st.sidebar:
     st.title("💬 카카오톡 대화 분석기")
     st.caption("카카오톡에서 내보낸 txt 또는 csv를 올리면 참여자, 시간대, 단어, 답장 속도를 분석합니다.")
     uploaded_file = st.file_uploader(
-        "대화 파일 업로드",
+        "대화 파일 업로드 (txt, csv)",
         type=None,
-        help="최근 파일에서 카카오톡으로 내보낸 파일을 고르세요.",
+        help="카카오톡에서 내보낸 .txt 파일을 선택하세요.",
     )
     pasted_text = st.text_area(
         "또는 대화 내용 붙여넣기",
@@ -584,7 +599,7 @@ with st.sidebar:
 
 
 if df is None:
-    st.info("왼쪽 사이드바에서 CSV 파일을 업로드하면 분석 탭이 나타납니다.")
+    st.info("왼쪽 사이드바에서 카카오톡 txt 또는 CSV 파일을 업로드하면 분석 탭이 나타납니다.")
     st.stop()
 
 stats = (
