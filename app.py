@@ -225,6 +225,14 @@ NEW_CONVERSATION_HOURS = 6
 READ_IGNORE_HOURS = 1
 
 
+PLOTLY_CONFIG = {
+    "scrollZoom": False,
+    "doubleClick": False,
+    "displayModeBar": False,
+    "displaylogo": False,
+}
+
+
 def style_chart(fig, title: str, reverse_y: bool = False, showlegend: bool = False):
     fig.update_layout(
         title=dict(text=title, x=0.02, xanchor="left", font=dict(size=18, color="#191919")),
@@ -236,13 +244,19 @@ def style_chart(fig, title: str, reverse_y: bool = False, showlegend: bool = Fal
         hoverlabel=dict(bgcolor="white", font_size=13, font_color="#191919"),
         coloraxis_colorbar=dict(title=""),
         showlegend=showlegend,
+        dragmode=False,
+        hovermode="closest",
     )
-    fig.update_xaxes(showgrid=True, gridcolor="rgba(0,0,0,0.06)", zeroline=False)
+    fig.update_xaxes(showgrid=True, gridcolor="rgba(0,0,0,0.06)", zeroline=False, fixedrange=True)
     if reverse_y:
-        fig.update_yaxes(showgrid=False, autorange="reversed")
+        fig.update_yaxes(showgrid=False, autorange="reversed", fixedrange=True)
     else:
-        fig.update_yaxes(showgrid=True, gridcolor="rgba(0,0,0,0.06)", zeroline=False)
+        fig.update_yaxes(showgrid=True, gridcolor="rgba(0,0,0,0.06)", zeroline=False, fixedrange=True)
     return fig
+
+
+def show_chart(fig, **_kwargs):
+    show_chart(fig, use_container_width=True, config=PLOTLY_CONFIG, on_select="ignore")
 
 
 def make_bar_chart(stats: pd.DataFrame, value_col: str, title: str, hover_label: str, ascending: bool = False):
@@ -681,19 +695,19 @@ with tab_basic:
             )
 
     st.markdown("### 📈 참여자 비교")
-    st.plotly_chart(
+    show_chart(
         make_bar_chart(stats, "메시지_개수", "누가 가장 많이 말했나", "메시지 개수"),
         use_container_width=True,
     )
 
     length_col1, length_col2 = st.columns(2)
     with length_col1:
-        st.plotly_chart(
+        show_chart(
             make_bar_chart(stats, "총_글자_수", "누가 글을 가장 많이 썼나", "총 글자 수"),
             use_container_width=True,
         )
     with length_col2:
-        st.plotly_chart(
+        show_chart(
             make_bar_chart(stats, "평균_메시지_길이", "누가 메시지를 길게 쓰나", "평균 길이(자)"),
             use_container_width=True,
         )
@@ -755,7 +769,7 @@ with tab_time:
         )
 
         st.subheader("🕐 시간대별 메시지 분포")
-        st.plotly_chart(
+        show_chart(
             make_time_bar_chart(
                 hour_counts,
                 "시간대",
@@ -767,13 +781,13 @@ with tab_time:
         )
 
         st.subheader("📆 요일별 메시지 분포")
-        st.plotly_chart(
+        show_chart(
             make_time_bar_chart(weekday_df, "요일", "월요일부터 일요일까지 대화량", "메시지 개수"),
             use_container_width=True,
         )
 
         st.subheader("📉 월별 메시지 추이")
-        st.plotly_chart(
+        show_chart(
             make_monthly_line_chart(monthly_counts, "월별 대화량 변화"),
             use_container_width=True,
         )
@@ -787,7 +801,7 @@ with tab_words:
         st.info("필터 후 분석할 단어가 없습니다.")
     else:
         st.subheader("🏅 전체 메시지 단어 TOP 20")
-        st.plotly_chart(
+        show_chart(
             make_word_bar_chart(top20, "가장 많이 쓴 단어", "등장 횟수"),
             use_container_width=True,
         )
@@ -813,7 +827,7 @@ with tab_words:
         if user_top10.empty:
             st.info(f"{selected_user}님의 분석 가능한 단어가 없습니다.")
         else:
-            st.plotly_chart(
+            show_chart(
                 make_word_bar_chart(user_top10, f"{selected_user}님이 많이 쓴 단어", "등장 횟수"),
                 use_container_width=True,
             )
@@ -835,14 +849,14 @@ with tab_words:
     with laugh_col1:
         st.subheader("ㅋㅋ ㅋ이 포함된 메시지")
         st.caption("ㅋㅋ, ㅋㅋㅋ처럼 ㅋ이 들어간 메시지 횟수")
-        st.plotly_chart(
+        show_chart(
             make_bar_chart(k_chart, "메시지_개수", "누가 ㅋ을 많이 쓰나", "메시지 개수"),
             use_container_width=True,
         )
     with laugh_col2:
         st.subheader("ㅎㅎ ㅎ이 포함된 메시지")
         st.caption("ㅎㅎ, ㅎㅎㅎ처럼 ㅎ이 들어간 메시지 횟수")
-        st.plotly_chart(
+        show_chart(
             make_bar_chart(h_chart, "메시지_개수", "누가 ㅎ을 많이 쓰나", "메시지 개수"),
             use_container_width=True,
         )
@@ -882,7 +896,7 @@ with tab_reply:
 
             st.subheader("⚡ 참여자별 평균 답장 속도")
             speed_chart = reply_stats.rename(columns={"replier": "User"})
-            st.plotly_chart(
+            show_chart(
                 make_duration_bar_chart(speed_chart, "avg_seconds", "답장이 빠를수록 왼쪽", "평균 답장 시간(초)"),
                 use_container_width=True,
             )
@@ -909,7 +923,7 @@ with tab_reply:
                 columns={"replier": "User", "ignore_count": "메시지_개수"}
             ).sort_values("메시지_개수", ascending=False)
             st.caption("답장까지 1시간 이상 6시간 미만 걸린 횟수입니다.")
-            st.plotly_chart(
+            show_chart(
                 make_bar_chart(ignore_chart, "메시지_개수", "읽씹이 많은 사람", "읽씹 횟수"),
                 use_container_width=True,
             )
