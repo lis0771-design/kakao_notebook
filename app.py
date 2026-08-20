@@ -1,4 +1,3 @@
-import platform
 import random
 import re
 from collections import Counter
@@ -229,23 +228,20 @@ def make_word_bar_chart(word_df: pd.DataFrame, title: str, hover_label: str):
 
 
 def get_korean_font_path() -> str | None:
-    if platform.system() == "Windows":
-        candidates = [
-            Path(r"C:\Windows\Fonts\malgun.ttf"),
-            Path(r"C:\Windows\Fonts\malgunbd.ttf"),
-        ]
-    elif platform.system() == "Darwin":
-        candidates = [
-            Path("/System/Library/Fonts/Supplemental/AppleGothic.ttf"),
-            Path("/Library/Fonts/AppleGothic.ttf"),
-            Path("/System/Library/Fonts/AppleGothic.ttf"),
-            Path("/System/Library/Fonts/AppleSDGothicNeo.ttc"),
-        ]
-    else:
-        candidates = [
-            Path("/usr/share/fonts/truetype/nanum/NanumGothic.ttf"),
-            Path("/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc"),
-        ]
+    app_dir = Path(__file__).resolve().parent
+    candidates = [
+        app_dir / "fonts" / "NanumGothic-Regular.ttf",
+        app_dir / "fonts" / "NanumGothic-Bold.ttf",
+        app_dir / "fonts" / "NanumGothic-ExtraBold.ttf",
+        Path(r"C:\Windows\Fonts\malgun.ttf"),
+        Path(r"C:\Windows\Fonts\malgunbd.ttf"),
+        Path("/System/Library/Fonts/Supplemental/AppleGothic.ttf"),
+        Path("/Library/Fonts/AppleGothic.ttf"),
+        Path("/System/Library/Fonts/AppleGothic.ttf"),
+        Path("/System/Library/Fonts/AppleSDGothicNeo.ttc"),
+        Path("/usr/share/fonts/truetype/nanum/NanumGothic.ttf"),
+        Path("/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc"),
+    ]
 
     for font_path in candidates:
         if font_path.exists():
@@ -693,12 +689,15 @@ with tab_words:
 
         st.subheader("☁️ 워드클라우드")
         if font_path:
-            st.caption(f"한글 폰트: {font_path}")
-            st.image(make_wordcloud_image(word_counter, font_path), use_container_width=True)
+            try:
+                st.caption(f"한글 폰트: {Path(font_path).name}")
+                st.image(make_wordcloud_image(word_counter, font_path), use_container_width=True)
+            except Exception as error:
+                st.warning(f"워드클라우드를 만들지 못했습니다: {error}")
         else:
             st.warning(
                 "한글 폰트를 찾지 못해 워드클라우드를 만들지 못했습니다. "
-                "Windows는 malgun.ttf, Mac은 AppleGothic이 필요합니다."
+                "프로젝트 fonts 폴더의 NanumGothic 폰트가 필요합니다."
             )
 
         st.subheader("👤 참여자별 단어 TOP 10")
