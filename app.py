@@ -34,11 +34,6 @@ st.markdown(
         padding: 18px 16px 14px 16px;
         box-shadow: 0 8px 22px rgba(254, 229, 0, 0.14);
     }
-    div[data-testid="stMetric"] label,
-    div[data-testid="stMetricLabel"],
-    div[data-testid="stMetricLabel"] *,
-    div[data-testid="stMetricDelta"],
-    div[data-testid="stMetricDelta"] *,
     [data-testid="stCaption"],
     [data-testid="stCaption"] *,
     [data-testid="stWidgetLabel"],
@@ -50,22 +45,45 @@ st.markdown(
         font-size: 1.2rem !important;
         line-height: 1.4 !important;
     }
+    [data-testid="stMetricLabel"],
+    [data-testid="stMetricLabel"] p,
+    [data-testid="stMetricLabel"] span,
+    [data-testid="stMetricLabel"] div,
+    [data-testid="stMetricLabel"] *,
     div[data-testid="stMetric"] label,
-    div[data-testid="stMetricLabel"],
-    div[data-testid="stMetricLabel"] * {
+    div[data-testid="stMetric"] label p,
+    div[data-testid="stMetric"] label span,
+    div[data-testid="stMetric"] label * {
+        font-size: 1.2rem !important;
+        line-height: 1.35 !important;
         color: #7A6A00 !important;
         font-weight: 700 !important;
+        white-space: normal !important;
+        overflow: visible !important;
+        text-overflow: unset !important;
+    }
+    [data-testid="stMetricDelta"],
+    [data-testid="stMetricDelta"] p,
+    [data-testid="stMetricDelta"] span,
+    [data-testid="stMetricDelta"] * {
+        font-size: 1.2rem !important;
+        line-height: 1.35 !important;
+        color: #B8860B !important;
+        font-weight: 600 !important;
+    }
+    [data-testid="stMetricLabel"] [data-testid="stMarkdownContainer"] p,
+    [data-testid="stMetricLabel"] [data-testid="stMarkdownContainer"] span {
+        font-size: 1.2rem !important;
+        line-height: 1.35 !important;
+        color: #7A6A00 !important;
+        font-weight: 700 !important;
+        white-space: normal !important;
     }
     div[data-testid="stMetricValue"],
     div[data-testid="stMetricValue"] * {
         color: #191919 !important;
         font-weight: 800 !important;
         font-size: 2.15rem !important;
-    }
-    div[data-testid="stMetricDelta"],
-    div[data-testid="stMetricDelta"] * {
-        color: #B8860B !important;
-        font-weight: 600 !important;
     }
     .stTabs {
         --primary-color: #7C3AED;
