@@ -690,26 +690,12 @@ with tab_basic:
         )
 
     st.markdown("### 💌 가장 긴 메시지")
-    st.markdown(
-        f"""
-        <div style="
-            background: linear-gradient(135deg, #FFFBE6 0%, #FFF3B0 100%);
-            border: 1px solid #FEE500;
-            border-radius: 16px;
-            padding: 20px 24px;
-            box-shadow: 0 8px 24px rgba(254, 229, 0, 0.18);
-        ">
-            <div style="color:#7A6A00; font-size:13px; margin-bottom:8px;">
-                {escape(str(longest["User"]))} · {int(longest["char_len"]):,}자
-                {f"· {escape(str(longest['Date']))}" if "Date" in longest and pd.notna(longest["Date"]) else ""}
-            </div>
-            <div style="white-space: pre-wrap; line-height: 1.6; color:#191919; font-size:16px;">
-                {escape(longest["Message"])}
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+    longest_meta = f"{longest['User']} · {int(longest['char_len']):,}자"
+    if "Date" in longest and pd.notna(longest["Date"]):
+        longest_meta += f" · {longest['Date']}"
+    with st.container(border=True):
+        st.caption(longest_meta)
+        st.markdown(str(longest["Message"]).replace("\n", "  \n"))
 
     with st.expander("📋 데이터 미리보기"):
         st.dataframe(df.head(10), use_container_width=True)
