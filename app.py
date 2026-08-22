@@ -1,7 +1,11 @@
 from datetime import datetime
 from io import BytesIO
+import ctypes
+import os
 import random
 import re
+import shutil
+import time
 from collections import Counter
 from html import escape
 from pathlib import Path
@@ -9,6 +13,7 @@ from pathlib import Path
 import pandas as pd
 import plotly.express as px
 import streamlit as st
+import streamlit.components.v1 as components
 from wordcloud import WordCloud
 
 st.set_page_config(page_title="카카오톡 대화 분석기", layout="wide")
@@ -677,8 +682,217 @@ def try_load_chat(uploaded_file, pasted_text: str):
     return None
 
 
+def kakao_exe_candidates() -> list[Path]:
+    env = os.environ
+    return [
+        Path(env.get("LOCALAPPDATA", "")) / "Kakao" / "KakaoTalk" / "KakaoTalk.exe",
+        Path(env.get("LOCALAPPDATA", "")) / "Program" / "Kakao" / "KakaoTalk" / "KakaoTalk.exe",
+        Path(env.get("PROGRAMFILES", "")) / "Kakao" / "KakaoTalk" / "KakaoTalk.exe",
+        Path(env.get("PROGRAMFILES(X86)", "")) / "Kakao" / "KakaoTalk" / "KakaoTalk.exe",
+    ]
+
+
+def focus_kakaotalk_window() -> bool:
+    if os.name != "nt":
+        return False
+    try:
+        user32 = ctypes.windll.user32
+        hwnd = user32.FindWindowW(None, "카카오톡")
+        if not hwnd:
+            return False
+        user32.ShowWindow(hwnd, 9)
+        user32.SetForegroundWindow(hwnd)
+        return True
+    except Exception:
+        return False
+
+
+def open_kakaotalk() -> tuple[bool, str]:
+    if os.name != "nt":
+        return False, "이 환경에서는 카카오톡을 자동으로 열 수 없습니다."
+
+    if focus_kakaotalk_window():
+        return True, "이미 실행 중인 카카오톡을 열었습니다."
+
+    for path in kakao_exe_candidates():
+        if path.is_file():
+            os.startfile(str(path))
+            time.sleep(0.4)
+            focus_kakaotalk_window()
+            return True, "카카오톡을 실행했습니다."
+
+    found = shutil.which("KakaoTalk")
+    if found:
+        os.startfile(found)
+        return True, "카카오톡을 실행했습니다."
+
+    return False, "이 PC에서 카카오톡을 찾지 못했습니다. 카카오톡을 설치한 뒤 다시 시도하세요."
+
+
+def export_watch_dirs() -> list[Path]:
+    home = Path.home()
+    dirs = [
+        home / "Downloads",
+        home / "Desktop",
+        home / "Documents",
+        home / "Downloads" / "KakaoTalk",
+        home / "Documents" / "KakaoTalk",
+        home / "OneDrive" / "Downloads",
+        home / "OneDrive" / "Desktop",
+        home / "OneDrive" / "Documents",
+    ]
+    seen = set()
+    result = []
+    for folder in dirs:
+        try:
+            resolved = folder.resolve()
+        except OSError:
+            continue
+        if resolved in seen or not folder.is_dir():
+            continue
+        seen.add(resolved)
+        result.append(folder)
+    return result
+
+
+def snapshot_kakao_exports() -> dict[str, float]:
+    files = {}
+    for folder in export_watch_dirs():
+        for path in folder.glob("KakaoTalk_*.txt"):
+            try:
+                files[str(path.resolve())] = path.stat().st_mtime
+            except OSError:
+                continue
+    return files
+
+
+def newest_new_kakao_export(before: dict[str, float], since_ts: float) -> Path | None:
+    found = []
+    for path_str, mtime in snapshot_kakao_exports().items():
+        path = Path(path_str)
+        if path_str not in before and mtime >= since_ts - 3:
+            found.append(path)
+        elif path_str in before and mtime > before[path_str] + 0.4:
+            found.append(path)
+    if not found:
+        return None
+    return max(found, key=lambda item: item.stat().st_mtime)
+
+
+def load_exported_kakao(path: Path) -> tuple[pd.DataFrame, Path]:
+    text = decode_upload(path.read_bytes())
+    parsed = parse_kakaotalk_text(text)
+    if parsed.empty:
+        raise ValueError("카카오톡 txt 대화 형식을 읽지 못했습니다.")
+
+    csv_path = path.with_name(path.stem + ".csv")
+    try:
+        parsed.to_csv(csv_path, index=False, encoding="utf-8-sig")
+    except OSError:
+        csv_path = Path(os.environ.get("TEMP", str(Path.home()))) / (path.stem + ".csv")
+        parsed.to_csv(csv_path, index=False, encoding="utf-8-sig")
+    return parsed, csv_path
+
+
 if "chat" not in st.session_state:
     st.session_state.chat = None
+if "kakao_import" not in st.session_state:
+    st.session_state.kakao_import = None
+if "last_import_csv" not in st.session_state:
+    st.session_state.last_import_csv = None
+
+
+def client_user_agent() -> str:
+    try:
+        headers = st.context.headers
+        return str(headers.get("User-Agent") or headers.get("user-agent") or "")
+    except Exception:
+        return ""
+
+
+def is_mobile_client() -> bool:
+    user_agent = client_user_agent()
+    if not user_agent:
+        return True
+    return bool(re.search(r"Android|iPhone|iPad|iPod|Mobile", user_agent, re.I))
+
+
+def render_mobile_kakao_upload() -> None:
+    components.html(
+        """
+        <style>
+          html, body { margin: 0; padding: 0; background: transparent; }
+          a {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            min-height: 64px;
+            background: #FEE500;
+            color: #111111;
+            border: 2px solid #111111;
+            border-radius: 12px;
+            font-weight: 800;
+            font-size: 1.3rem;
+            text-decoration: none;
+            font-family: "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+            box-sizing: border-box;
+          }
+        </style>
+        <a id="kakao-upload" target="_top" rel="noreferrer">Upload</a>
+        <script>
+          (function () {
+            var link = document.getElementById("kakao-upload");
+            var ua = navigator.userAgent || "";
+            var url = "kakaotalk://launch";
+            if (/iPhone|iPad|iPod/i.test(ua)) {
+              url = "kakaotalk://";
+            } else if (/Android/i.test(ua)) {
+              url = "intent://launch#Intent;scheme=kakaotalk;package=com.kakao.talk;end";
+            }
+            link.href = url;
+            link.addEventListener("click", function (event) {
+              try {
+                window.top.location.href = url;
+                event.preventDefault();
+              } catch (error) {}
+            });
+          })();
+        </script>
+        """,
+        height=76,
+    )
+
+
+def apply_loaded_chat(loaded: pd.DataFrame, csv_path: Path | None = None) -> None:
+    if loaded is None or loaded.empty:
+        raise ValueError("대화 내용을 읽지 못했습니다.")
+    st.session_state.chat = prepare_chat_df(loaded)
+    st.session_state.kakao_import = None
+    st.session_state.last_import_csv = str(csv_path) if csv_path else None
+
+
+def start_kakao_import() -> None:
+    opened, detail = open_kakaotalk()
+    st.session_state.kakao_import = {
+        "snapshot": snapshot_kakao_exports(),
+        "since": time.time(),
+        "opened": opened,
+        "detail": detail,
+    }
+
+
+def try_consume_kakao_export() -> bool:
+    state = st.session_state.kakao_import
+    if not state:
+        return False
+    found = newest_new_kakao_export(state["snapshot"], state["since"])
+    if found is None:
+        return False
+    loaded, csv_path = load_exported_kakao(found)
+    apply_loaded_chat(loaded, csv_path)
+    return True
+
 
 if st.session_state.chat is None:
     st.markdown(
@@ -686,6 +900,18 @@ if st.session_state.chat is None:
         <style>
         [data-testid="stSidebar"] { display: none !important; }
         [data-testid="stSidebarCollapsedControl"] { display: none !important; }
+        [data-testid="stAppViewContainer"] .stButton button {
+            background: #FEE500 !important;
+            color: #111111 !important;
+            border: 2px solid #111111 !important;
+            font-weight: 800 !important;
+            font-size: 1.3rem !important;
+            min-height: 64px !important;
+            border-radius: 12px !important;
+        }
+        [data-testid="stFileUploader"] button::after {
+            content: "파일 선택" !important;
+        }
         </style>
         """,
         unsafe_allow_html=True,
@@ -694,30 +920,92 @@ if st.session_state.chat is None:
         '<h1>💬 카카오톡<br><span style="white-space:nowrap;">대화 분석기</span></h1>',
         unsafe_allow_html=True,
     )
-    st.caption("카카오톡에서 내보낸 txt 또는 csv 파일을 올리면 대화를 분석합니다.")
-    uploaded_file = st.file_uploader(
-        "Upload",
-        type=None,
-        label_visibility="collapsed",
-        key="landing_upload",
-    )
-    pasted_text = st.text_area(
-        "또는 대화 내용 붙여넣기",
-        height=120,
-        placeholder="파일이 안 보이면 내보낸 텍스트를 여기에 붙여넣으세요.",
-    )
-    st.caption("카카오톡 → 대화 내용 내보내기 → 모든 메시지 내부저장소에 저장한 txt 파일을 선택하세요.")
 
-    if uploaded_file is not None or (pasted_text and pasted_text.strip()):
+    if st.session_state.kakao_import is None:
+        if is_mobile_client():
+            st.caption("Upload를 누르면 핸드폰의 카카오톡 채팅 창이 열립니다.")
+            render_mobile_kakao_upload()
+            st.caption("대화를 저장한 뒤 이 화면으로 돌아와 아래 버튼으로 파일을 선택하세요.")
+            uploaded_file = st.file_uploader(
+                "저장한 파일 선택",
+                type=None,
+                key="landing_upload",
+            )
+            if uploaded_file is not None:
+                try:
+                    loaded = try_load_chat(uploaded_file, "")
+                    apply_loaded_chat(loaded)
+                    st.rerun()
+                except Exception as error:
+                    st.error(f"파일을 불러오지 못했습니다: {error}")
+        else:
+            st.caption("Upload를 누르면 카카오톡이 열립니다. 채팅을 저장하면 CSV로 바꿔 분석합니다.")
+            if st.button("Upload", use_container_width=True, key="open_kakao_upload"):
+                start_kakao_import()
+                st.rerun()
+    else:
+        state = st.session_state.kakao_import
+        if state["opened"]:
+            st.success(state["detail"])
+        else:
+            st.warning(state["detail"])
+
+        st.markdown(
+            """
+1. 카카오톡에서 **분석할 채팅방**을 여세요.
+2. 채팅방 오른쪽 위 **메뉴(☰) → 대화내용 저장**을 누르세요.
+3. **txt 파일**로 저장하면 자동으로 **CSV로 변환**한 뒤 분석을 시작합니다.
+            """
+        )
+        st.caption("저장 위치는 보통 다운로드, 바탕화면, 문서 폴더입니다.")
+
         try:
-            loaded = try_load_chat(uploaded_file, pasted_text)
-            if loaded is None or loaded.empty:
-                st.error("대화 내용을 읽지 못했습니다.")
-            else:
-                st.session_state.chat = prepare_chat_df(loaded)
+            if try_consume_kakao_export():
                 st.rerun()
         except Exception as error:
-            st.error(f"파일을 불러오지 못했습니다: {error}")
+            st.error(f"내보낸 파일을 불러오지 못했습니다: {error}")
+
+        if hasattr(st, "fragment"):
+
+            @st.fragment(run_every=2)
+            def poll_kakao_export():
+                try:
+                    if try_consume_kakao_export():
+                        st.rerun()
+                    else:
+                        st.caption("내보낸 KakaoTalk_*.txt 파일을 기다리는 중…")
+                except Exception as error:
+                    st.error(f"내보낸 파일을 불러오지 못했습니다: {error}")
+
+            poll_kakao_export()
+        else:
+            st.caption("저장한 뒤 아래 버튼을 눌러 주세요.")
+
+        if st.button("저장한 파일 불러오기", use_container_width=True, key="import_saved_kakao"):
+            try:
+                if try_consume_kakao_export():
+                    st.rerun()
+                else:
+                    st.warning("새로운 KakaoTalk_*.txt 파일을 아직 찾지 못했습니다.")
+            except Exception as error:
+                st.error(f"내보낸 파일을 불러오지 못했습니다: {error}")
+
+        uploaded_file = st.file_uploader(
+            "또는 파일 직접 선택",
+            type=None,
+            key="landing_upload",
+        )
+        if uploaded_file is not None:
+            try:
+                loaded = try_load_chat(uploaded_file, "")
+                apply_loaded_chat(loaded)
+                st.rerun()
+            except Exception as error:
+                st.error(f"파일을 불러오지 못했습니다: {error}")
+
+        if st.button("취소", use_container_width=True, key="cancel_kakao_import"):
+            st.session_state.kakao_import = None
+            st.rerun()
     st.stop()
 
 chat = st.session_state.chat
@@ -734,6 +1022,7 @@ with st.sidebar:
     )
     if st.button("새 파일 Upload", use_container_width=True):
         st.session_state.chat = None
+        st.session_state.kakao_import = None
         st.rerun()
 
     st.divider()
@@ -756,11 +1045,14 @@ with st.sidebar:
     st.subheader("📖 사용 방법")
     st.markdown(
         """
-1. 카카오톡 **대화 내용 내보내기 → 모든 메시지 내부저장소에 저장**
-2. 파일은 보통 `KakaoTalk_날짜.txt` 입니다.
-3. 첫 화면 **Upload** 버튼으로 파일을 선택하세요.
+1. **Upload**를 누르면 카카오톡이 열립니다.
+2. 채팅방에서 **메뉴 → 대화내용 저장**으로 txt를 저장하세요.
+3. 저장하면 CSV로 변환한 뒤 분석을 시작합니다.
         """
     )
+    csv_path = st.session_state.get("last_import_csv")
+    if csv_path:
+        st.caption(f"변환된 CSV: {csv_path}")
 
 stats = (
     df.groupby("User", as_index=False)
