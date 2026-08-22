@@ -13,7 +13,6 @@ from pathlib import Path
 import pandas as pd
 import plotly.express as px
 import streamlit as st
-import streamlit.components.v1 as components
 from wordcloud import WordCloud
 
 st.set_page_config(page_title="카카오톡 대화 분석기", layout="wide")
@@ -818,50 +817,17 @@ def is_mobile_client() -> bool:
 
 
 def render_mobile_kakao_upload() -> None:
-    components.html(
-        """
-        <style>
-          html, body { margin: 0; padding: 0; background: transparent; }
-          a {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            width: 100%;
-            min-height: 64px;
-            background: #FEE500;
-            color: #111111;
-            border: 2px solid #111111;
-            border-radius: 12px;
-            font-weight: 800;
-            font-size: 1.3rem;
-            text-decoration: none;
-            font-family: "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
-            box-sizing: border-box;
-          }
-        </style>
-        <a id="kakao-upload" target="_top" rel="noreferrer">Upload</a>
-        <script>
-          (function () {
-            var link = document.getElementById("kakao-upload");
-            var ua = navigator.userAgent || "";
-            var url = "kakaotalk://launch";
-            if (/iPhone|iPad|iPod/i.test(ua)) {
-              url = "kakaotalk://";
-            } else if (/Android/i.test(ua)) {
-              url = "intent://launch#Intent;scheme=kakaotalk;package=com.kakao.talk;end";
-            }
-            link.href = url;
-            link.addEventListener("click", function (event) {
-              try {
-                window.top.location.href = url;
-                event.preventDefault();
-              } catch (error) {}
-            });
-          })();
-        </script>
-        """,
-        height=76,
+    button = (
+        '<a class="upload-kakao-btn" href="/app/static/open-kakaotalk.html" '
+        'style="display:flex;align-items:center;justify-content:center;width:100%;'
+        "min-height:64px;background:#FEE500;color:#111111;border:2px solid #111111;"
+        'border-radius:12px;font-weight:800;font-size:1.3rem;text-decoration:none;">'
+        "Upload</a>"
     )
+    if hasattr(st, "html"):
+        st.html(button)
+    else:
+        st.markdown(button, unsafe_allow_html=True)
 
 
 def apply_loaded_chat(loaded: pd.DataFrame, csv_path: Path | None = None) -> None:
@@ -912,6 +878,22 @@ if st.session_state.chat is None:
         [data-testid="stFileUploader"] button::after {
             content: "파일 선택" !important;
         }
+        a.upload-kakao-btn,
+        a.upload-kakao-btn:visited {
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            width: 100% !important;
+            min-height: 64px !important;
+            background: #FEE500 !important;
+            color: #111111 !important;
+            border: 2px solid #111111 !important;
+            border-radius: 12px !important;
+            font-weight: 800 !important;
+            font-size: 1.3rem !important;
+            text-decoration: none !important;
+            box-sizing: border-box !important;
+        }
         </style>
         """,
         unsafe_allow_html=True,
@@ -923,7 +905,7 @@ if st.session_state.chat is None:
 
     if st.session_state.kakao_import is None:
         if is_mobile_client():
-            st.caption("Upload를 누르면 핸드폰의 카카오톡 채팅 창이 열립니다.")
+            st.caption("Upload를 누르면 카카오톡 앱이 열립니다. 안 열리면 다음 화면의 노란 버튼을 한 번 더 누르세요.")
             render_mobile_kakao_upload()
             st.caption("대화를 저장한 뒤 이 화면으로 돌아와 아래 버튼으로 파일을 선택하세요.")
             uploaded_file = st.file_uploader(

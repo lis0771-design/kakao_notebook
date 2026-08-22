@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>카카오톡 열기</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: #fffef4;
+      font-family: "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+      color: #111;
+    }
+    main {
+      max-width: 420px;
+      margin: 0 auto;
+      padding: 28px 20px;
+    }
+    p { font-size: 1.05rem; line-height: 1.5; }
+    a.btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      min-height: 64px;
+      margin: 12px 0;
+      background: #FEE500;
+      color: #111111;
+      border: 2px solid #111111;
+      border-radius: 12px;
+      font-weight: 800;
+      font-size: 1.25rem;
+      text-decoration: none;
+      box-sizing: border-box;
+    }
+    a.back {
+      display: block;
+      margin-top: 28px;
+      text-align: center;
+      color: #555;
+      font-size: 1rem;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <p>카카오톡 채팅 창을 엽니다. 바로 안 열리면 아래 버튼을 한 번 더 눌러 주세요.</p>
+    <a class="btn" id="open-kakao" href="kakaotalk://">카카오톡 열기</a>
+    <a class="back" href="javascript:history.back()">분석기로 돌아가기</a>
+  </main>
+  <script>
+    (function () {
+      var ua = navigator.userAgent || "";
+      var isAndroid = /Android/i.test(ua);
+      var link = document.getElementById("open-kakao");
+      var url = isAndroid
+        ? "intent://launch#Intent;scheme=kakaotalk;package=com.kakao.talk;end"
+        : "kakaotalk://";
+      link.href = url;
+
+      function openKakao() {
+        window.location.href = url;
+      }
+
+      openKakao();
+      setTimeout(function () {
+        if (isAndroid && document.visibilityState === "visible") {
+          window.location.href = "kakaotalk://launch";
+        }
+      }, 400);
+    })();
+  </script>
+</body>
+</html>
